@@ -21,18 +21,47 @@ export default async function ShareStoryPage() {
   }
 
   // Fetch categories for the form
-  const { data: categories, error: categoriesError } = await supabase
-    .from("story_categories")
-    .select("*")
-    .order("name")
-
-  if (categoriesError) {
-    console.error("Error fetching categories:", categoriesError)
+  let categories = []
+  let categoriesError = null
+  
+  try {
+    // First check if the table exists
+    const { data: tableCheck, error: tableError } = await supabase
+      .from("story_categories")
+      .select("count")
+      .limit(1)
+    
+    if (tableError) {
+      console.error("Table check error:", tableError)
+      // Table might not exist, use fallback categories
+      categories = []
+    } else {
+      // Table exists, fetch categories
+      const { data: categoriesData, error: categoriesQueryError } = await supabase
+        .from("story_categories")
+        .select("*")
+        .order("name")
+      
+      if (categoriesQueryError) {
+        console.error("Error fetching categories:", categoriesQueryError)
+        categoriesError = categoriesQueryError
+      } else {
+        categories = categoriesData || []
+      }
+    }
+  } catch (error) {
+    console.error("Unexpected error:", error)
+    categoriesError = error
   }
+
+  // Debug logging
+  console.log("ShareStoryPage - categories data:", categories)
+  console.log("ShareStoryPage - categories error:", categoriesError)
+  console.log("ShareStoryPage - categories count:", categories?.length)
 
   return (
     <div className="min-h-screen bg-background pt-20">
-      <StoryShareForm categories={categories || []} user={user} />
+      <StoryShareForm categories={categories} user={user} />
     </div>
   )
 }

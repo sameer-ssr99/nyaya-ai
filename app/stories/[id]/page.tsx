@@ -22,66 +22,76 @@ export default async function StoryPage({ params }: PageProps) {
     // Continue without user data
   }
 
-  // Fetch story with user info and categories
-  const { data: story } = await supabase
-    .from("legal_stories")
-    .select(`
-      *,
-      user_profiles (
-        full_name
-      ),
-      story_category_mapping (
-        story_categories (
-          name,
-          icon,
-          color
-        )
-      )
-    `)
-    .eq("id", id)
-    .eq("is_approved", true)
-    .single()
+  // Fetch the story
+  let story = null
+  let comments = []
+  let userLiked = false
 
-  if (!story) {
+  try {
+    // Fetch the story with user profile
+    const { data: storyData, error: storyError } = await supabase
+      .from("legal_stories")
+      .select(`
+        *,
+        user_profiles (
+          full_name,
+          location,
+          profession
+        )
+      `)
+      .eq("id", id)
+      .eq("is_approved", true)
+      .single()
+
+    if (storyError) {
+      console.error("Error fetching story:", storyError)
+      notFound()
+    }
+
+    story = storyData
+
+    // Fetch comments for the story
+    const { data: commentsData, error: commentsError } = await supabase
+      .from("story_comments")
+      .select(`
+        *,
+        user_profiles (
+          full_name,
+          location,
+          profession
+        )
+      `)
+      .eq("story_id", id)
+      .eq("is_approved", true)
+      .order("created_at", { ascending: false })
+
+    if (commentsError) {
+      console.error("Error fetching comments:", commentsError)
+      comments = []
+    } else {
+      comments = commentsData || []
+    }
+
+    // Check if user liked the story (if user is logged in)
+    if (user) {
+      // You can implement like functionality here later
+      userLiked = false
+    }
+
+  } catch (error) {
+    console.error("Unexpected error in StoryPage:", error)
     notFound()
   }
 
-  // Increment view count
-  await supabase
-    .from("legal_stories")
-    .update({ view_count: story.view_count + 1 })
-    .eq("id", id)
-
-  // Fetch comments
-  const { data: comments } = await supabase
-    .from("story_comments")
-    .select(`
-      *,
-      user_profiles (
-        full_name
-      )
-    `)
-    .eq("story_id", id)
-    .eq("is_approved", true)
-    .order("created_at", { ascending: true })
-
-  // Check if user has liked the story
-  let userLiked = false
-  if (user) {
-    const { data: like } = await supabase
-      .from("story_likes")
-      .select("id")
-      .eq("story_id", id)
-      .eq("user_id", user.id)
-      .single()
-    userLiked = !!like
+  if (!story) {
+    notFound()
   }
 
   return (
     <div className="min-h-screen bg-background pt-20">
       <StoryView 
         story={story} 
-        comments={comments || []} 
+        comments={comments} 
         user={user} 
         userLiked={userLiked}
       />

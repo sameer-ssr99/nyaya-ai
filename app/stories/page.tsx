@@ -14,71 +14,84 @@ export default async function StoriesPage() {
     // Continue without user data
   }
 
-  // Fetch approved stories with user info and categories
-  const { data: stories, error: storiesError } = await supabase
-    .from("legal_stories")
-    .select(`
-      *,
-      user_profiles (
-        full_name
-      ),
-      story_category_mapping (
-        story_categories (
-          name,
-          icon,
-          color
+  // Initialize variables
+  let stories = []
+  let categories = []
+  let featuredStories = []
+  let storiesError = null
+  let categoriesError = null
+  let featuredError = null
+
+  try {
+    // Fetch all legal stories
+    const { data: storiesData, error: storiesQueryError } = await supabase
+      .from("legal_stories")
+      .select(`
+        *,
+        user_profiles (
+          full_name,
+          location,
+          profession
         )
-      )
-    `)
-    .eq("is_approved", true)
-    .order("created_at", { ascending: false })
+      `)
+      .eq("is_approved", true)
+      .order("created_at", { ascending: false })
 
-  if (storiesError) {
-    console.error("Error fetching stories:", storiesError)
-  }
+    if (storiesQueryError) {
+      console.error("Error fetching stories:", storiesQueryError)
+      storiesError = storiesQueryError
+    } else {
+      stories = storiesData || []
+    }
 
-  // Fetch all categories for filtering
-  const { data: categories, error: categoriesError } = await supabase
-    .from("story_categories")
-    .select("*")
-    .order("name")
-
-  if (categoriesError) {
-    console.error("Error fetching categories:", categoriesError)
-  }
-
-  // Fetch featured stories
-  const { data: featuredStories, error: featuredError } = await supabase
-    .from("legal_stories")
-    .select(`
-      *,
-      user_profiles (
-        full_name
-      ),
-      story_category_mapping (
-        story_categories (
-          name,
-          icon,
-          color
+    // Fetch featured stories
+    const { data: featuredData, error: featuredQueryError } = await supabase
+      .from("legal_stories")
+      .select(`
+        *,
+        user_profiles (
+          full_name,
+          location,
+          profession
         )
-      )
-    `)
-    .eq("is_approved", true)
-    .eq("is_featured", true)
-    .order("created_at", { ascending: false })
-    .limit(3)
+      `)
+      .eq("is_approved", true)
+      .eq("is_featured", true)
+      .order("created_at", { ascending: false })
+      .limit(3)
 
-  if (featuredError) {
-    console.error("Error fetching featured stories:", featuredError)
+    if (featuredQueryError) {
+      console.error("Error fetching featured stories:", featuredQueryError)
+      featuredError = featuredQueryError
+    } else {
+      featuredStories = featuredData || []
+    }
+
+    // Fetch all categories for filtering
+    const { data: categoriesData, error: categoriesQueryError } = await supabase
+      .from("story_categories")
+      .select("*")
+      .order("name")
+
+    if (categoriesQueryError) {
+      console.error("Error fetching categories:", categoriesQueryError)
+      categoriesError = categoriesQueryError
+    } else {
+      categories = categoriesData || []
+    }
+
+  } catch (error) {
+    console.error("Unexpected error in StoriesPage:", error)
   }
 
   return (
     <div className="min-h-screen bg-background pt-20">
       <StoriesDirectory 
-        stories={stories || []} 
-        categories={categories || []} 
-        featuredStories={featuredStories || []}
-        user={user} 
+        stories={stories} 
+        categories={categories} 
+        featuredStories={featuredStories}
+        user={user}
+        error={storiesError || categoriesError || featuredError}
       />
     </div>
   )

@@ -21,7 +21,8 @@ import {
   CheckCircle,
   AlertCircle,
   Send,
-  ThumbsUp
+  ThumbsUp,
+  Trash2
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
@@ -43,6 +44,7 @@ export default function StoryView({ story, comments, user, userLiked }: StoryVie
   const [isSubmittingComment, setIsSubmittingComment] = useState(false)
   const [newComments, setNewComments] = useState<any[]>([])
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
+  const [commentError, setCommentError] = useState<string | null>(null)
 
   const supabase = createClient()
   const router = useRouter()
@@ -63,6 +65,33 @@ export default function StoryView({ story, comments, user, userLiked }: StoryVie
       .toUpperCase()
   }
 
+  const handleDeleteStory = async () => {
+    if (!user) return
+
+    if (confirm('Are you sure you want to delete this story? This action cannot be undone.')) {
+      try {
+        // Delete the story (this will cascade delete comments)
+        const { error: deleteError } = await supabase
+          .from('legal_stories')
+          .delete()
+          .eq('id', story.id)
+
+        if (deleteError) {
+          throw new Error(`Failed to delete story: ${deleteError.message}`)
+        }
+
+        // Redirect to stories page
+        router.push('/stories')
+      } catch (error) {
+        console.error('Error deleting story:', error)
+        setMessage({
+          type: 'error',
+          text: 'Failed to delete story. Please try again.'
+        })
+      }
+    }
+  }
+
   const handleLike = async () => {
     if (!user) {
       router.push("/auth/login")
@@ -71,85 +100,201 @@ export default function StoryView({ story, comments, user, userLiked }: StoryVie
 
     try {
       if (isLiked) {
-        // Unlike
-        await supabase
+        // Unlike - remove from story_likes table
+        const { error: unlikeError } = await supabase
           .from("story_likes")
           .delete()
           .eq("story_id", story.id)
           .eq("user_id", user.id)
+
+        if (unlikeError) throw unlikeError
+        
         setLikeCount(likeCount - 1)
+        setIsLiked(false)
       } else {
-        // Like
-        await supabase
+        // Like - add to story_likes table
+        const { error: likeError } = await supabase
           .from("story_likes")
           .insert({
             story_id: story.id,
             user_id: user.id,
           })
+
+        if (likeError) throw likeError
+        
         setLikeCount(likeCount + 1)
+        setIsLiked(true)
       }
-      setIsLiked(!isLiked)
     } catch (error) {
       console.error("Error toggling like:", error)
+      setMessage({
+        type: 'error',
+        text: 'Failed to update like. Please try again.'
+      })
     }
   }
 
-  const handleComment = async () => {
-    if (!user) {
-      router.push("/auth/login")
-      return
-    }
-
-    if (!commentText.trim()) {
-      setMessage({
-        type: "error",
-        text: "Please enter a comment"
-      })
-      return
-    }
+  const handleComment = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!commentText.trim()) return
 
     setIsSubmittingComment(true)
-    setMessage(null)
+    setCommentError(null)
 
     try {
-      const { data: comment, error } = await supabase
-        .from("story_comments")
+      let userId = null
+      let commenterName = 'Anonymous Commenter'
+      let isAnonymous = true
+
+      if (user && !isAnonymousComment) {
+        // User is logged in and doesn't want to be anonymous
+        // Use existing user profile or create one with their name
+        const { data: existingProfile, error: profileCheckError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name')
+          .eq('id', user.id)
+          .single()
+
+        if (existingProfile) {
+          userId = existingProfile.id
+          commenterName = existingProfile.full_name || user.user_metadata?.full_name || 'User'
+          isAnonymous = false
+        } else {
+          // Create profile for logged-in user
+          const { data: profileData, error: profileError } = await supabase
+            .from('user_profiles')
+            .insert({
+              id: user.id,
+              full_name: user.user_metadata?.full_name || 'User',
+              location: 'Unknown',
+              profession: 'User'
+            })
+            .select('id, full_name')
+            .single()
+
+          if (profileError) {
+            console.error('Error creating user profile:', profileError)
+            throw new Error(`Failed to create user profile: ${profileError.message}`)
+          }
+          
+          userId = profileData.id
+          commenterName = profileData.full_name
+          isAnonymous = false
+        }
+      } else {
+        // Anonymous comment - create temporary profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .insert({
+            full_name: 'Anonymous Commenter',
+            location: 'Unknown',
+            profession: 'Commenter'
+          })
+          .select('id')
+          .single()
+
+        if (profileError) {
+          console.error('Error creating user profile:', profileError)
+          throw new Error(`Failed to create user profile for comment: ${profileError.message}`)
+        }
+        
+        userId = profileData.id
+        commenterName = 'Anonymous Commenter'
+        isAnonymous = true
+      }
+
+      // Insert the comment
+      const { data: commentData, error: commentError } = await supabase
+        .from('story_comments')
         .insert({
           story_id: story.id,
-          user_id: user.id,
+          user_id: userId,
           content: commentText.trim(),
-          is_anonymous: isAnonymousComment,
-          created_at: new Date().toISOString(),
+          is_anonymous: isAnonymous,
+          is_approved: true
         })
-        .select(`
-          *,
-          user_profiles (
-            full_name
-          )
-        `)
+        .select('*')
         .single()
 
-      if (error) throw error
+      if (commentError) {
+        console.error('Error inserting comment:', commentError)
+        throw new Error(`Failed to add comment: ${commentError.message}`)
+      }
 
-      // Add to local comments
-      setNewComments([...newComments, comment])
-      setCommentText("")
+      // Update the comment count on the story
+      await supabase
+        .from('legal_stories')
+        .update({ comment_count: (story.comment_count || 0) + 1 })
+        .eq('id', story.id)
+
+      // Add the new comment to the local state
+      const newComment = {
+        ...commentData,
+        user_profiles: { full_name: commenterName }
+      }
+      
+      setNewComments([newComment, ...newComments])
+      setCommentText('')
+      setCommentError(null)
+
+      // Show success message
       setMessage({
-        type: "success",
-        text: "Comment added successfully!"
+        type: 'success',
+        text: 'Comment added successfully!'
       })
 
       // Clear success message after 3 seconds
       setTimeout(() => setMessage(null), 3000)
 
     } catch (error) {
-      console.error("Error adding comment:", error)
+      console.error('Error adding comment:', error)
+      setCommentError(error instanceof Error ? error.message : 'Failed to add comment')
       setMessage({
-        type: "error",
-        text: "Failed to add comment. Please try again."
+        type: 'error',
+        text: 'Failed to add comment. Please try again.'
       })
     } finally {
       setIsSubmittingComment(false)
+    }
+  }
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!user) return
+
+    if (confirm('Are you sure you want to delete this comment? This action cannot be undone.')) {
+      try {
+        // Delete the comment
+        const { error: deleteError } = await supabase
+          .from('story_comments')
+          .delete()
+          .eq('id', commentId)
+
+        if (deleteError) {
+          throw new Error(`Failed to delete comment: ${deleteError.message}`)
+        }
+
+        // Remove from local state
+        setNewComments(prev => prev.filter(c => c.id !== commentId))
+
+        // Update comment count on story
+        await supabase
+          .from('legal_stories')
+          .update({ comment_count: (story.comment_count || 0) - 1 })
+          .eq('id', story.id)
+
+        setMessage({
+          type: 'success',
+          text: 'Comment deleted successfully!'
+        })
+
+        setTimeout(() => setMessage(null), 3000)
+      } catch (error) {
+        console.error('Error deleting comment:', error)
+        setMessage({
+          type: 'error',
+          text: 'Failed to delete comment. Please try again.'
+        })
+      }
     }
   }
 
@@ -223,6 +368,19 @@ export default function StoryView({ story, comments, user, userLiked }: StoryVie
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </Button>
+              
+              {/* Delete Story Button - Only show if user owns the story */}
+              {user && story.user_id === user.id && (
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={handleDeleteStory}
+                  className="ml-2"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              )}
             </div>
           </CardHeader>
           
@@ -387,6 +545,18 @@ export default function StoryView({ story, comments, user, userLiked }: StoryVie
                           <span className="text-xs text-muted-foreground">
                             {formatDate(comment.created_at)}
                           </span>
+                          
+                          {/* Delete Comment Button - Only show if user owns the comment */}
+                          {user && comment.user_id === user.id && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="h-6 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground">{comment.content}</p>
                       </div>

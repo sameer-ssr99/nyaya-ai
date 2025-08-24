@@ -47,63 +47,140 @@ export default function StoryShareForm({ categories, user }: StoryShareFormProps
   const supabase = createClient()
   const router = useRouter()
 
+  // Debug logging
+  console.log("StoryShareForm - categories:", categories)
+  console.log("StoryShareForm - categories length:", categories?.length)
+
+  // Fallback categories if none are provided
+  const fallbackCategories = [
+    { id: "1", name: "Consumer Rights" },
+    { id: "2", name: "Labor Rights" },
+    { id: "3", name: "Property Rights" },
+    { id: "4", name: "Family Law" },
+    { id: "5", name: "Criminal Law" },
+    { id: "6", name: "Constitutional Rights" },
+    { id: "7", name: "Corporate Law" },
+    { id: "8", name: "Tax Law" },
+    { id: "9", name: "Immigration Law" },
+    { id: "10", name: "Intellectual Property" },
+    { id: "11", name: "Environmental Law" },
+    { id: "12", name: "Cyber Law" },
+  ]
+
+  // Use provided categories or fallback
+  const availableCategories = categories && categories.length > 0 ? categories : fallbackCategories
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setMessage(null)
 
     try {
-      // Validate required fields
-      if (!formData.title.trim() || !formData.content.trim() || !formData.case_type) {
-        throw new Error("Please fill in all required fields")
+      let userId = null
+      let authorName = 'Anonymous User'
+
+      if (user && !isAnonymous) {
+        // User is logged in and doesn't want to be anonymous
+        // Use existing user profile or create one with their name
+        const { data: existingProfile, error: profileCheckError } = await supabase
+          .from('user_profiles')
+          .select('id, full_name')
+          .eq('id', user.id)
+          .single()
+
+        if (existingProfile) {
+          userId = existingProfile.id
+          authorName = existingProfile.full_name || user.user_metadata?.full_name || 'User'
+        } else {
+          // Create profile for logged-in user
+          const { data: profileData, error: profileError } = await supabase
+            .from('user_profiles')
+            .insert({
+              id: user.id,
+              full_name: user.user_metadata?.full_name || 'User',
+              location: formData.location || 'Unknown',
+              profession: 'Story Author'
+            })
+            .select('id, full_name')
+            .single()
+
+          if (profileError) {
+            console.error('Error creating user profile:', profileError)
+            throw new Error(`Failed to create user profile: ${profileError.message}`)
+          }
+          
+          userId = profileData.id
+          authorName = profileData.full_name
+        }
+      } else {
+        // Anonymous story - create temporary profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('user_profiles')
+          .insert({
+            full_name: 'Anonymous User',
+            location: formData.location || 'Unknown',
+            profession: 'Story Author'
+          })
+          .select('id')
+          .single()
+
+        if (profileError) {
+          console.error('Error creating user profile:', profileError)
+          throw new Error(`Failed to create user profile: ${profileError.message}`)
+        }
+        
+        userId = profileData.id
+        authorName = 'Anonymous User'
       }
 
-      // Create the story
-      const { data: story, error: storyError } = await supabase
-        .from("legal_stories")
+      // Insert the story
+      const { data: storyData, error: storyError } = await supabase
+        .from('legal_stories')
         .insert({
-          user_id: user.id,
-          title: formData.title.trim(),
-          content: formData.content.trim(),
+          user_id: userId,
+          title: formData.title,
+          content: formData.content,
           case_type: formData.case_type,
-          location: formData.location.trim() || null,
-          outcome: formData.outcome.trim() || null,
+          location: formData.location,
+          outcome: formData.outcome,
           is_anonymous: isAnonymous,
-          is_approved: false, // Stories need approval
-          tags: formData.tags,
-          created_at: new Date().toISOString(),
+          is_approved: true, // Auto-approve for now
+          tags: formData.tags
         })
-        .select()
+        .select('id')
         .single()
 
-      if (storyError) throw storyError
+      if (storyError) {
+        console.error('Error inserting story:', storyError)
+        throw new Error(`Failed to submit story: ${storyError.message}`)
+      }
 
       setMessage({
-        type: "success",
-        text: "Your story has been submitted successfully! It will be reviewed and published soon."
+        type: 'success',
+        text: `Story submitted successfully as ${isAnonymous ? 'Anonymous' : authorName}! It will be visible to other users shortly.`
       })
 
       // Reset form
       setFormData({
-        title: "",
-        content: "",
-        case_type: "",
-        location: "",
-        outcome: "",
-        tags: [],
+        title: '',
+        content: '',
+        case_type: '',
+        location: '',
+        outcome: '',
+        tags: []
       })
-      setTagInput("")
+      setTagInput('')
 
-      // Redirect to stories page after 2 seconds
+      // Redirect to stories page after a short delay
       setTimeout(() => {
-        router.push("/stories")
+        router.push('/stories')
       }, 2000)
 
     } catch (error) {
-      console.error("Error submitting story:", error)
+      console.error('Error submitting story:', error)
       setMessage({
-        type: "error",
-        text: error instanceof Error ? error.message : "Failed to submit story. Please try again."
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to submit story. Please try again.'
       })
     } finally {
       setIsLoading(false)
@@ -152,6 +229,18 @@ export default function StoryShareForm({ categories, user }: StoryShareFormProps
             Stories that violate community guidelines will not be published.
           </AlertDescription>
         </Alert>
+
+        {/* Database Setup Notice */}
+        {(!categories || categories.length === 0) && (
+          <Alert className="mb-8 border-amber-200 bg-amber-50">
+            <Info className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              <strong>Database Setup Required:</strong> The legal categories dropdown is using fallback data. 
+              To see the full list of legal categories, please run the database setup scripts in your Supabase project. 
+              See <code className="bg-amber-100 px-1 rounded">DATABASE_SETUP.md</code> for instructions.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <Card>
           <CardHeader>
@@ -204,21 +293,42 @@ export default function StoryShareForm({ categories, user }: StoryShareFormProps
               {/* Case Type */}
               <div>
                 <Label htmlFor="case_type">Legal Category *</Label>
-                <Select
-                  value={formData.case_type}
-                  onValueChange={(value) => setFormData({ ...formData, case_type: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select the type of legal case" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.name}>
-                        {category.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {availableCategories.length > 0 ? (
+                  <div className="space-y-2">
+                    <Select
+                      value={formData.case_type}
+                      onValueChange={(value) => {
+                        console.log("Selected category:", value)
+                        setFormData({ ...formData, case_type: value })
+                      }}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select the type of legal case" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableCategories.map((category) => (
+                          <SelectItem key={category.id} value={category.name}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Available categories: {availableCategories.length}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-3 border border-dashed border-muted-foreground rounded-md bg-muted/50">
+                    <p className="text-sm text-muted-foreground text-center">
+                      No legal categories available. Please contact support or try again later.
+                    </p>
+                  </div>
+                )}
+                {availableCategories.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    This might be due to a database connection issue. The form will use fallback categories.
+                  </p>
+                )}
               </div>
 
               {/* Content */}

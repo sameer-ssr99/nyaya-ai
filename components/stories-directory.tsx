@@ -38,9 +38,10 @@ interface StoriesDirectoryProps {
   categories: any[]
   featuredStories: any[]
   user: any
+  error?: any
 }
 
-export default function StoriesDirectory({ stories, categories, featuredStories, user }: StoriesDirectoryProps) {
+export default function StoriesDirectory({ stories, categories, featuredStories, user, error }: StoriesDirectoryProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [sortBy, setSortBy] = useState("latest")
@@ -122,6 +123,51 @@ export default function StoriesDirectory({ stories, categories, featuredStories,
             Learn from real legal experiences shared by our community. These anonymous stories help you understand your rights and navigate similar situations.
           </p>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-8 p-6 border border-red-200 bg-red-50 rounded-lg">
+            <div className="text-center">
+              <Shield className="h-12 w-12 text-red-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-red-800 mb-2">Database Error</h3>
+              <p className="text-red-700 mb-4">
+                There was an error loading stories: {error.message || 'Unknown error occurred'}
+              </p>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Try Again
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Database Setup Notice */}
+        {!error && stories.length === 0 && (
+          <div className="mb-8 p-6 border border-amber-200 bg-amber-50 rounded-lg">
+            <div className="text-center">
+              <Shield className="h-12 w-12 text-amber-600 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-amber-800 mb-2">Database Setup Required</h3>
+              <p className="text-amber-700 mb-4">
+                No legal stories are available because the required database tables haven't been created yet.
+              </p>
+              <div className="space-y-2 text-sm text-amber-600">
+                <p>To see legal stories, you need to:</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to your Supabase project</li>
+                  <li>Run the database setup scripts</li>
+                  <li>Create the <code className="bg-amber-100 px-1 rounded">legal_stories</code> table</li>
+                </ol>
+              </div>
+              <div className="mt-4">
+                <Link href="/stories/share">
+                  <Button variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-100">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Share Your First Story
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Featured Stories */}
         {featuredStories.length > 0 && (

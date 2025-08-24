@@ -51,12 +51,45 @@ export default async function DashboardPage() {
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
 
+  // Fetch user's AI chat sessions
+  const { data: chatSessions } = await supabase
+    .from("chat_sessions")
+    .select(`
+      *,
+      chat_messages (
+        id,
+        content,
+        role,
+        created_at
+      )
+    `)
+    .eq("user_id", user.id)
+    .order("updated_at", { ascending: false })
+    .limit(5) // Get last 5 chat sessions
+
+  // Fetch user's generated documents
+  const { data: generatedDocuments } = await supabase
+    .from("generated_documents")
+    .select(`
+      *,
+      document_templates (
+        id,
+        title,
+        category
+      )
+    `)
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(5) // Get last 5 documents
+
   return (
     <div className="min-h-screen bg-background pt-20">
       <UserDashboard 
         user={user} 
         consultations={consultations || []} 
         reviews={reviews || []} 
+        chatSessions={chatSessions || []}
+        generatedDocuments={generatedDocuments || []}
       />
     </div>
   )

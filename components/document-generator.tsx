@@ -34,88 +34,16 @@ interface DocumentTemplate {
   template_content: string
 }
 
-const sampleTemplate: DocumentTemplate = {
-  id: "1",
-  title: "Rental Agreement",
-  description: "Comprehensive rental agreement for residential properties",
-  category: "Property",
-  fields: [
-    {
-      id: "landlord_name",
-      label: "Landlord Name",
-      type: "text",
-      required: true,
-      placeholder: "Enter landlord's full name",
-    },
-    { id: "tenant_name", label: "Tenant Name", type: "text", required: true, placeholder: "Enter tenant's full name" },
-    {
-      id: "property_address",
-      label: "Property Address",
-      type: "textarea",
-      required: true,
-      placeholder: "Enter complete property address",
-    },
-    {
-      id: "monthly_rent",
-      label: "Monthly Rent (₹)",
-      type: "number",
-      required: true,
-      placeholder: "Enter monthly rent amount",
-    },
-    {
-      id: "security_deposit",
-      label: "Security Deposit (₹)",
-      type: "number",
-      required: true,
-      placeholder: "Enter security deposit amount",
-    },
-    {
-      id: "lease_duration",
-      label: "Lease Duration",
-      type: "select",
-      required: true,
-      options: ["6 months", "1 year", "2 years", "3 years"],
-    },
-    { id: "start_date", label: "Lease Start Date", type: "date", required: true },
-    {
-      id: "special_terms",
-      label: "Special Terms & Conditions",
-      type: "textarea",
-      required: false,
-      placeholder: "Any additional terms or conditions",
-    },
-  ],
-  template_content: `RENTAL AGREEMENT
-
-This Rental Agreement is made on {start_date} between {landlord_name} (Landlord) and {tenant_name} (Tenant) for the property located at {property_address}.
-
-TERMS AND CONDITIONS:
-
-1. RENT: The monthly rent is ₹{monthly_rent}, payable on or before the 5th of each month.
-
-2. SECURITY DEPOSIT: A security deposit of ₹{security_deposit} has been paid by the tenant.
-
-3. LEASE DURATION: This agreement is valid for {lease_duration} starting from {start_date}.
-
-4. SPECIAL TERMS: {special_terms}
-
-5. MAINTENANCE: The tenant shall maintain the property in good condition.
-
-6. TERMINATION: Either party may terminate this agreement with 30 days written notice.
-
-Landlord Signature: _________________    Tenant Signature: _________________
-{landlord_name}                         {tenant_name}
-
-Date: _______________                   Date: _______________`,
-}
-
 export default function DocumentGenerator({ templateSlug, userId }: DocumentGeneratorProps) {
-  const [template, setTemplate] = useState<DocumentTemplate | null>(sampleTemplate)
+  const [template, setTemplate] = useState<DocumentTemplate | null>(null)
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [generatedContent, setGeneratedContent] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAIEnhancing, setIsAIEnhancing] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const supabase = createBrowserClient()
 
   useEffect(() => {
@@ -124,12 +52,20 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
 
   const loadTemplate = async () => {
     try {
+      setIsLoading(true)
+      setError(null)
       console.log("[v0] Loading template for slug:", templateSlug)
-      const { data, error } = await supabase.from("document_templates").select("*").eq("slug", templateSlug).single()
+      
+      const { data, error } = await supabase
+        .from("document_templates")
+        .select("*")
+        .eq("slug", templateSlug)
+        .single()
 
       if (error) {
-        console.log("[v0] Database error, using fallback template:", error.message)
-        setTemplate(sampleTemplate)
+        console.error("[v0] Database error loading template:", error.message)
+        setError(`Template not found: ${templateSlug}`)
+        setIsLoading(false)
         return
       }
 
@@ -140,14 +76,18 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
           title: data.title,
           description: data.description,
           category: data.category,
-          fields: data.fields,
-          template_content: data.template_content,
+          fields: data.fields || [],
+          template_content: data.template_content || '',
         }
         setTemplate(mappedTemplate)
+      } else {
+        setError(`Template not found: ${templateSlug}`)
       }
     } catch (error) {
-      console.log("[v0] Error loading template, using fallback:", error)
-      setTemplate(sampleTemplate)
+      console.error("[v0] Error loading template:", error)
+      setError(`Failed to load template: ${templateSlug}`)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -179,7 +119,7 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
   }
 
   const enhanceWithAI = async () => {
-    if (!generatedContent) return
+    if (!generatedContent || !template) return
 
     setIsAIEnhancing(true)
 
@@ -197,25 +137,27 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
       })
 
       if (!response.ok) {
-        throw new Error("Failed to enhance document")
+        throw new Error(`Failed to enhance document: ${response.statusText}`)
       }
 
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let enhancedContent = ""
+      const enhancedContent = await response.text()
+      setGeneratedContent(enhancedContent)
+      
+      // Show success message
+      setMessage({
+        type: 'success',
+        text: 'Document enhanced successfully with AI!'
+      })
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+      // Clear success message after 3 seconds
+      setTimeout(() => setMessage(null), 3000)
 
-          const chunk = decoder.decode(value, { stream: true })
-          enhancedContent += chunk
-          setGeneratedContent(enhancedContent)
-        }
-      }
     } catch (error) {
       console.error("Error enhancing document:", error)
+      setMessage({
+        type: 'error',
+        text: 'Failed to enhance document. Please try again.'
+      })
     } finally {
       setIsAIEnhancing(false)
     }
@@ -263,8 +205,16 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
     saveDocument()
   }
 
-  if (!template) {
+  if (isLoading) {
     return <div className="text-center py-12">Loading template...</div>
+  }
+
+  if (error) {
+    return <div className="text-center py-12 text-red-500">{error}</div>
+  }
+
+  if (!template) {
+    return <div className="text-center py-12">No template found for this slug.</div>
   }
 
   return (
@@ -283,6 +233,17 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
         <h1 className="text-3xl font-bold text-gray-900 mb-4">{template.title}</h1>
         <p className="text-lg text-gray-600">{template.description}</p>
       </div>
+
+      {/* Message Display */}
+      {message && (
+        <div className={`mb-6 p-4 rounded-lg border ${
+          message.type === "success" 
+            ? "border-green-200 bg-green-50 text-green-800" 
+            : "border-red-200 bg-red-50 text-red-800"
+        }`}>
+          {message.text}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Form Section */}

@@ -19,19 +19,69 @@ import {
   CheckCircle,
   AlertCircle,
   Clock as ClockIcon,
-  MessageCircle
+  MessageCircle,
+  FileText
 } from "lucide-react"
 import Link from "next/link"
 import { motion } from "framer-motion"
+import React from "react"
 
 interface UserDashboardProps {
   user: any
   consultations: any[]
   reviews: any[]
+  chatSessions: any[]
+  generatedDocuments: any[]
 }
 
-export default function UserDashboard({ user, consultations, reviews }: UserDashboardProps) {
+export default function UserDashboard({ user, consultations, reviews, chatSessions, generatedDocuments }: UserDashboardProps) {
   const [activeTab, setActiveTab] = useState("consultations")
+  const [localConsultations, setLocalConsultations] = useState(consultations)
+  const [isCancelling, setIsCancelling] = useState<string | null>(null)
+
+  // Update local consultations when prop changes
+  React.useEffect(() => {
+    setLocalConsultations(consultations)
+  }, [consultations])
+
+  const cancelConsultation = async (consultationId: string) => {
+    if (!confirm("Are you sure you want to cancel this consultation?")) return
+    
+    setIsCancelling(consultationId)
+    
+    try {
+      const response = await fetch("/api/consultations/cancel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ consultationId }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to cancel consultation")
+      }
+
+      // Update local state
+      setLocalConsultations(prev => 
+        prev.map(c => 
+          c.id === consultationId 
+            ? { ...c, status: 'cancelled' }
+            : c
+        )
+      )
+
+      // Show success message (you can add a toast notification here)
+      alert("Consultation cancelled successfully")
+
+    } catch (error) {
+      console.error("Error cancelling consultation:", error)
+      alert(error instanceof Error ? error.message : "Failed to cancel consultation")
+    } finally {
+      setIsCancelling(null)
+    }
+  }
 
   const getInitials = (name: string) => {
     return name
@@ -102,12 +152,12 @@ export default function UserDashboard({ user, consultations, reviews }: UserDash
     ))
   }
 
-  const totalSpent = consultations
+  const totalSpent = localConsultations
     .filter(c => c.status === "paid" || c.status === "completed")
     .reduce((sum, c) => sum + (c.lawyers?.consultation_fee || 0), 0)
 
-  const pendingConsultations = consultations.filter(c => c.status === "pending" || c.status === "paid")
-  const completedConsultations = consultations.filter(c => c.status === "completed")
+  const pendingConsultations = localConsultations.filter(c => c.status === "pending" || c.status === "paid")
+  const completedConsultations = localConsultations.filter(c => c.status === "completed")
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -128,14 +178,14 @@ export default function UserDashboard({ user, consultations, reviews }: UserDash
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-primary" />
                 <div>
                   <p className="text-sm text-muted-foreground">Total Consultations</p>
-                  <p className="text-2xl font-bold">{consultations.length}</p>
+                  <p className="text-2xl font-bold">{localConsultations.length}</p>
                 </div>
               </div>
             </CardContent>
@@ -168,10 +218,22 @@ export default function UserDashboard({ user, consultations, reviews }: UserDash
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <IndianRupee className="h-5 w-5 text-green-600" />
+                <MessageCircle className="h-5 w-5 text-blue-600" />
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Spent</p>
-                  <p className="text-2xl font-bold">{formatFee(totalSpent)}</p>
+                  <p className="text-sm text-muted-foreground">AI Chat Sessions</p>
+                  <p className="text-2xl font-bold">{chatSessions.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-purple-600" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Documents</p>
+                  <p className="text-2xl font-bold">{generatedDocuments.length}</p>
                 </div>
               </div>
             </CardContent>
@@ -182,15 +244,17 @@ export default function UserDashboard({ user, consultations, reviews }: UserDash
       {/* Tabs */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="consultations">My Consultations</TabsTrigger>
+            <TabsTrigger value="ai-chat">AI Chat History</TabsTrigger>
+            <TabsTrigger value="documents">Generated Documents</TabsTrigger>
             <TabsTrigger value="reviews">My Reviews</TabsTrigger>
           </TabsList>
 
           <TabsContent value="consultations" className="space-y-6">
-            {consultations.length > 0 ? (
+            {localConsultations.length > 0 ? (
               <div className="space-y-4">
-                {consultations.map((consultation) => (
+                {localConsultations.map((consultation) => (
                   <Card key={consultation.id}>
                     <CardContent className="p-6">
                       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -249,6 +313,18 @@ export default function UserDashboard({ user, consultations, reviews }: UserDash
                               </Link>
                             </Button>
                             
+                            {/* Cancel button for pending/paid consultations */}
+                            {(consultation.status === "pending" || consultation.status === "paid") && (
+                              <Button 
+                                variant="destructive" 
+                                size="sm"
+                                onClick={() => cancelConsultation(consultation.id)}
+                                disabled={isCancelling === consultation.id}
+                              >
+                                {isCancelling === consultation.id ? "Cancelling..." : "Cancel"}
+                              </Button>
+                            )}
+                            
                             {consultation.status === "completed" && (
                               <Button size="sm" asChild>
                                 <Link href={`/lawyers/${consultation.lawyers?.id}`}>
@@ -279,6 +355,141 @@ export default function UserDashboard({ user, consultations, reviews }: UserDash
                   <Button asChild>
                     <Link href="/lawyers">
                       Find Lawyers
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="ai-chat" className="space-y-6">
+            {chatSessions.length > 0 ? (
+              <div className="space-y-4">
+                {chatSessions.map((session) => (
+                  <Card key={session.id}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-3">
+                            <MessageCircle className="h-5 w-5 text-primary" />
+                            <h3 className="font-semibold text-lg">{session.title}</h3>
+                            <Badge variant="secondary">
+                              {session.chat_messages?.length || 0} messages
+                            </Badge>
+                          </div>
+                          
+                          {session.chat_messages && session.chat_messages.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="text-sm text-muted-foreground">
+                                Last message: {formatDate(session.chat_messages[0].created_at)}
+                              </div>
+                              <div className="p-3 bg-muted rounded-lg">
+                                <p className="text-sm">
+                                  <span className="font-medium">
+                                    {session.chat_messages[0].role === 'user' ? 'You' : 'AI'}:
+                                  </span>{" "}
+                                  {session.chat_messages[0].content.length > 100 
+                                    ? `${session.chat_messages[0].content.substring(0, 100)}...`
+                                    : session.chat_messages[0].content
+                                  }
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex flex-col gap-2">
+                          <Button size="sm" asChild>
+                            <Link href="/chat">
+                              Continue Chat
+                            </Link>
+                          </Button>
+                          <div className="text-xs text-muted-foreground text-center">
+                            {formatDate(session.updated_at)}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <MessageCircle className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No AI chat history yet</h3>
+                  <p className="text-muted-foreground mb-6">Start chatting with our AI legal assistant</p>
+                  <Button asChild>
+                    <Link href="/chat">
+                      Start AI Chat
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          <TabsContent value="documents" className="space-y-6">
+            {generatedDocuments.length > 0 ? (
+              <div className="space-y-4">
+                {generatedDocuments.map((document) => (
+                  <Card key={document.id}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Badge variant="outline">{document.document_templates?.category || "Document"}</Badge>
+                            <h3 className="font-semibold text-lg">{document.title}</h3>
+                          </div>
+                          
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            <div>Template: {document.document_templates?.title || "Custom Document"}</div>
+                            <div>Generated: {formatDate(document.created_at)}</div>
+                            <div className="p-3 bg-muted rounded-lg">
+                              <p>
+                                {document.content.length > 150 
+                                  ? `${document.content.substring(0, 150)}...`
+                                  : document.content
+                                }
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2">
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/documents/generate/${document.document_templates?.slug || 'custom'}`}>
+                              Regenerate
+                            </Link>
+                          </Button>
+                          <Button size="sm" onClick={() => {
+                            const blob = new Blob([document.content], { type: "text/plain" })
+                            const url = URL.createObjectURL(blob)
+                            const a = document.createElement("a")
+                            a.href = url
+                            a.download = `${document.title}.txt`
+                            document.body.appendChild(a)
+                            a.click()
+                            document.body.removeChild(a)
+                            URL.revokeObjectURL(url)
+                          }}>
+                            Download
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No documents generated yet</h3>
+                  <p className="text-muted-foreground mb-6">Create your first legal document using our templates</p>
+                  <Button asChild>
+                    <Link href="/documents">
+                      Generate Document
                     </Link>
                   </Button>
                 </CardContent>
