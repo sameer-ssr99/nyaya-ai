@@ -132,9 +132,11 @@ If you believe your right to equality has been violated, consider:
 }
 
 export default function KYRArticleView({ category, articleSlug }: KYRArticleViewProps) {
-  const [article, setArticle] = useState<Article | null>(sampleArticle)
-  const [loading, setLoading] = useState(true)
-  const [bookmarked, setBookmarked] = useState(false)
+  const [article, setArticle] = useState<Article | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [isBookmarking, setIsBookmarking] = useState(false)
   const supabase = createBrowserClient()
 
   useEffect(() => {
@@ -143,27 +145,93 @@ export default function KYRArticleView({ category, articleSlug }: KYRArticleView
 
   const loadArticle = async () => {
     try {
-      const { data } = await supabase
-        .from("legal_articles")
+      setIsLoading(true)
+      
+      // Fetch article from database
+      const { data, error } = await supabase
+        .from("kyr_articles")
         .select("*")
-        .eq("category_slug", category)
         .eq("slug", articleSlug)
         .single()
 
+      if (error) {
+        console.error("Error loading article:", error)
+        setError("Failed to load article")
+        return
+      }
+
       if (data) {
         setArticle(data)
+        // Check if article is bookmarked
+        await checkBookmarkStatus(data.id)
+      } else {
+        setError("Article not found")
       }
     } catch (error) {
       console.error("Error loading article:", error)
+      setError("Failed to load article")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const handleBookmark = async () => {
-    // Toggle bookmark functionality
-    setBookmarked(!bookmarked)
-    // Here you would save to database
+  const checkBookmarkStatus = async (articleId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: bookmark } = await supabase
+        .from('bookmarks')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('article_id', articleId)
+        .single()
+
+      setIsBookmarked(!!bookmark)
+    } catch (error) {
+      console.error("Error checking bookmark status:", error)
+    }
+  }
+
+  const toggleBookmark = async () => {
+    if (!article) return
+
+    try {
+      setIsBookmarking(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        alert("Please log in to bookmark articles")
+        return
+      }
+
+      const response = await fetch('/api/bookmarks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ articleId: article.id }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle bookmark')
+      }
+
+      const result = await response.json()
+      setIsBookmarked(result.action === 'added')
+      
+      // Show feedback
+      if (result.action === 'added') {
+        alert('Article bookmarked successfully!')
+      } else {
+        alert('Bookmark removed successfully!')
+      }
+    } catch (error) {
+      console.error("Error toggling bookmark:", error)
+      alert("Failed to update bookmark")
+    } finally {
+      setIsBookmarking(false)
+    }
   }
 
   const handleShare = async () => {
@@ -196,7 +264,7 @@ export default function KYRArticleView({ category, articleSlug }: KYRArticleView
     }
   }
 
-  if (loading) {
+  if (isLoading) {
     return <div className="text-center py-12">Loading article...</div>
   }
 
@@ -243,10 +311,12 @@ export default function KYRArticleView({ category, articleSlug }: KYRArticleView
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleBookmark}
-                className={bookmarked ? "bg-green-50 text-green-600" : ""}
+                onClick={toggleBookmark}
+                className={isBookmarked ? "bg-green-50 text-green-600" : ""}
+                disabled={isBookmarking}
               >
-                <Bookmark className="w-4 h-4" />
+                <Bookmark className={`w-4 h-4 ${isBookmarked ? "fill-current" : ""}`} />
+                {isBookmarked ? "Bookmarked" : "Bookmark"}
               </Button>
               <Button variant="outline" size="sm" onClick={handleShare}>
                 <Share2 className="w-4 h-4" />

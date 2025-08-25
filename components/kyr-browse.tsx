@@ -109,32 +109,68 @@ export default function KYRBrowse() {
 
   const loadCategories = async () => {
     try {
-      console.log("[v0] Loading categories from database...")
-      const { data, error } = await supabase.from("legal_categories").select("*").order("title")
+      // Get unique categories from kyr_articles table
+      const { data: articles, error } = await supabase
+        .from("kyr_articles")
+        .select("category")
 
       if (error) {
-        console.log("[v0] Database error, using default categories:", error.message)
+        console.error("Error loading categories:", error)
         return
       }
 
-      if (data && data.length > 0) {
-        console.log("[v0] Loaded categories from database:", data.length)
-        const mappedCategories: RightsCategory[] = data.map((cat: any, index: number) => ({
-          id: cat.id,
-          title: cat.title,
-          description: cat.description,
-          icon: cat.icon || "BookOpen",
-          color: cat.color || `bg-${["blue", "green", "orange", "purple", "red", "pink"][index % 6]}-500`,
-          articleCount: 0, // Will be calculated separately
-          slug: cat.slug,
-        }))
-        setCategories(mappedCategories)
-      } else {
-        console.log("[v0] No categories found in database, using defaults")
-      }
+      // Group articles by category and count them
+      const categoryCounts = articles.reduce((acc: any, article) => {
+        acc[article.category] = (acc[article.category] || 0) + 1
+        return acc
+      }, {})
+
+      // Create category objects with counts
+      const dbCategories = Object.keys(categoryCounts).map((category, index) => ({
+        id: (index + 1).toString(),
+        title: category,
+        description: getCategoryDescription(category),
+        icon: getCategoryIcon(category),
+        color: getCategoryColor(category),
+        articleCount: categoryCounts[category],
+        slug: category.toLowerCase().replace(/\s+/g, '-'),
+      }))
+
+      setCategories(dbCategories)
+      setFilteredCategories(dbCategories)
     } catch (error) {
-      console.log("[v0] Error loading categories, using defaults:", error)
+      console.error("Error loading categories:", error)
     }
+  }
+
+  const getCategoryDescription = (category: string) => {
+    const descriptions: { [key: string]: string } = {
+      "Constitutional Rights": "Fundamental rights guaranteed by the Indian Constitution",
+      "Consumer Rights": "Protection against unfair trade practices and defective goods",
+      "Education Rights": "Right to education and educational institutions",
+      "Transparency Laws": "Laws promoting government transparency and accountability",
+    }
+    return descriptions[category] || "Legal rights and protections in this category"
+  }
+
+  const getCategoryIcon = (category: string) => {
+    const icons: { [key: string]: string } = {
+      "Constitutional Rights": "Scale",
+      "Consumer Rights": "Shield",
+      "Education Rights": "BookOpen",
+      "Transparency Laws": "Shield",
+    }
+    return icons[category] || "BookOpen"
+  }
+
+  const getCategoryColor = (category: string) => {
+    const colors: { [key: string]: string } = {
+      "Constitutional Rights": "bg-blue-500",
+      "Consumer Rights": "bg-green-500",
+      "Education Rights": "bg-purple-500",
+      "Transparency Laws": "bg-orange-500",
+    }
+    return colors[category] || "bg-gray-500"
   }
 
   const getIcon = (iconName: string) => {

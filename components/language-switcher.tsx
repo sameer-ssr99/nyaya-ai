@@ -6,11 +6,11 @@ import { Globe } from "lucide-react"
 import { useI18n } from "@/lib/i18n/context"
 import type { Language } from "@/lib/i18n/translations"
 
-const languages: { code: Language; name: string; nativeName: string }[] = [
-  { code: "en", name: "English", nativeName: "English" },
-  { code: "hi", name: "Hindi", nativeName: "हिन्दी" },
-  { code: "mr", name: "Marathi", nativeName: "मराठी" },
-  { code: "te", name: "Telugu", nativeName: "తెలుగు" },
+const languages: { code: Language; name: string; nativeName: string; flag: string }[] = [
+  { code: "en", name: "English", nativeName: "English", flag: "🇺🇸" },
+  { code: "hi", name: "Hindi", nativeName: "हिन्दी", flag: "🇮🇳" },
+  { code: "mr", name: "Marathi", nativeName: "मराठी", flag: "🇮🇳" },
+  { code: "te", name: "Telugu", nativeName: "తెలుగు", flag: "🇮🇳" },
 ]
 
 export function LanguageSwitcher() {
@@ -21,20 +21,28 @@ export function LanguageSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" className="flex items-center gap-2 h-9 px-3 rounded-lg hover:bg-gray-100 text-gray-600 hover:text-gray-900">
           <Globe className="h-4 w-4" />
-          <span className="hidden sm:inline">{currentLanguage?.nativeName}</span>
+          <span className="hidden sm:inline text-sm font-medium">{currentLanguage?.flag} {currentLanguage?.nativeName}</span>
+          <span className="sm:hidden text-sm font-medium">{currentLanguage?.flag}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" className="w-48">
         {languages.map((lang) => (
           <DropdownMenuItem
             key={lang.code}
             onClick={() => setLanguage(lang.code)}
-            className={`flex items-center justify-between ${language === lang.code ? "bg-accent" : ""}`}
+            className={`flex items-center gap-3 p-3 cursor-pointer ${
+              language === lang.code 
+                ? "bg-blue-50 text-blue-600 border border-blue-200" 
+                : "hover:bg-gray-50"
+            }`}
           >
-            <span>{lang.nativeName}</span>
-            <span className="text-xs text-muted-foreground ml-2">{lang.name}</span>
+            <span className="text-lg">{lang.flag}</span>
+            <div className="flex flex-col">
+              <span className="font-medium">{lang.nativeName}</span>
+              <span className="text-xs text-gray-500">{lang.name}</span>
+            </div>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

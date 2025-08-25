@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, Download, Eye, Loader2, Wand2 } from "lucide-react"
+import { ArrowLeft, Download, Eye, Loader2, Wand2, Save } from "lucide-react"
 import Link from "next/link"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -144,51 +144,88 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
       setGeneratedContent(enhancedContent)
       
       // Show success message
-      setMessage({
-        type: 'success',
-        text: 'Document enhanced successfully with AI!'
-      })
+      // setMessage({
+      //   type: 'success',
+      //   text: 'Document enhanced successfully with AI!'
+      // })
 
       // Clear success message after 3 seconds
-      setTimeout(() => setMessage(null), 3000)
+      // setTimeout(() => setMessage(null), 3000)
 
     } catch (error) {
       console.error("Error enhancing document:", error)
-      setMessage({
-        type: 'error',
-        text: 'Failed to enhance document. Please try again.'
-      })
+      // setMessage({
+      //   type: 'error',
+      //   text: 'Failed to enhance document. Please try again.'
+      // })
     } finally {
       setIsAIEnhancing(false)
     }
   }
 
   const saveDocument = async () => {
-    if (!generatedContent || !template) return
+    if (!generatedContent || !userId) return
 
     try {
       const { data, error } = await supabase
         .from("generated_documents")
         .insert({
           user_id: userId,
-          template_id: template.id,
-          title: `${template.title} - ${new Date().toLocaleDateString()}`,
+          template_id: template?.id,
+          title: template?.title || "Generated Document",
           content: generatedContent,
-          form_data: formData,
           created_at: new Date().toISOString(),
         })
         .select()
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("Error saving document:", error)
+        
+        // If table doesn't exist, show helpful message
+        if (error.code === '42P01') {
+          setMessage({
+            type: 'error',
+            text: 'Database tables not set up. Please contact support.'
+          })
+        } else {
+          setMessage({
+            type: 'error',
+            text: 'Failed to save document. Please try again.'
+          })
+        }
+        
+        // Clear error message after 5 seconds
+        setTimeout(() => setMessage(null), 5000)
+        return
+      }
 
       console.log("Document saved successfully")
+      
+      // Show success message
+      setMessage({
+        type: 'success',
+        text: 'Document saved successfully! You can find it in your dashboard.'
+      })
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setMessage(null), 5000)
+
+      return data
     } catch (error) {
       console.error("Error saving document:", error)
+      
+      setMessage({
+        type: 'error',
+        text: 'Failed to save document. Please try again.'
+      })
+
+      // Clear error message after 5 seconds
+      setTimeout(() => setMessage(null), 5000)
     }
   }
 
-  const downloadDocument = () => {
+  const downloadDocument = async () => {
     if (!generatedContent) return
 
     const blob = new Blob([generatedContent], { type: "text/plain" })
@@ -202,7 +239,7 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
     URL.revokeObjectURL(url)
 
     // Save to database
-    saveDocument()
+    await saveDocument()
   }
 
   if (isLoading) {
@@ -361,29 +398,42 @@ export default function DocumentGenerator({ templateSlug, userId }: DocumentGene
                 </div>
 
                 <div className="flex gap-2">
-                  <Button
-                    onClick={enhanceWithAI}
-                    disabled={isAIEnhancing}
-                    variant="outline"
-                    className="flex-1 bg-transparent"
-                  >
-                    {isAIEnhancing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Enhancing...
-                      </>
-                    ) : (
-                      <>
-                        <Wand2 className="w-4 h-4 mr-2" />
-                        Enhance with AI
-                      </>
-                    )}
-                  </Button>
-
                   <Button onClick={downloadDocument} className="flex-1 bg-green-500 hover:bg-green-600">
                     <Download className="w-4 h-4 mr-2" />
-                    Download
+                    Download & Save
                   </Button>
+                  
+                  {generatedContent && (
+                    <Button 
+                      onClick={saveDocument} 
+                      variant="outline" 
+                      className="flex-1"
+                    >
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Only
+                    </Button>
+                  )}
+                  
+                  {generatedContent && (
+                    <Button
+                      onClick={enhanceWithAI}
+                      disabled={isAIEnhancing}
+                      variant="outline"
+                      className="flex-1 bg-transparent"
+                    >
+                      {isAIEnhancing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Enhancing...
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-4 h-4 mr-2" />
+                          Enhance with AI
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : (

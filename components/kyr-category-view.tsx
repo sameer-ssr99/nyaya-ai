@@ -72,34 +72,43 @@ export default function KYRCategoryView({ category }: KYRCategoryViewProps) {
 
   const loadCategoryData = async () => {
     try {
-      // Load category info
-      const { data: categoryData } = await supabase
-        .from("legal_categories")
-        .select("title")
-        .eq("slug", category)
-        .single()
+      setLoading(true)
+      
+      // Format category name for display
+      const formattedCategory = category
+        .split("-")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ")
+      
+      setCategoryTitle(formattedCategory)
 
-      if (categoryData) {
-        setCategoryTitle(categoryData.title)
-      } else {
-        // Fallback to formatted category name
-        setCategoryTitle(
-          category
-            .split("-")
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(" "),
-        )
-      }
-
-      // Load articles for this category
-      const { data: articlesData } = await supabase
-        .from("legal_articles")
+      // Load articles for this category from kyr_articles table
+      const { data: articlesData, error } = await supabase
+        .from("kyr_articles")
         .select("*")
-        .eq("category_slug", category)
+        .eq("category", formattedCategory)
         .order("created_at", { ascending: false })
 
+      if (error) {
+        console.error("Error loading articles:", error)
+        return
+      }
+
       if (articlesData && articlesData.length > 0) {
-        setArticles(articlesData)
+        const formattedArticles: Article[] = articlesData.map((article: any) => ({
+          id: article.id,
+          title: article.title,
+          description: article.summary || "",
+          content: article.content,
+          slug: article.slug,
+          readTime: article.read_time || 5,
+          difficulty: article.difficulty || "Beginner",
+          tags: article.tags || [],
+          createdAt: article.created_at,
+        }))
+        setArticles(formattedArticles)
+      } else {
+        setArticles([])
       }
     } catch (error) {
       console.error("Error loading category data:", error)
