@@ -504,3 +504,5 @@ export default function HistoryView({ user, chatSessions, generatedDocuments, bo
 
 
 
+
+

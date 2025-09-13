@@ -721,3 +721,5 @@ SELECT 'Generated Documents' as table_name, COUNT(*) as record_count FROM genera
 
 
 
+
+

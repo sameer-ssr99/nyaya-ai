@@ -15,3 +15,5 @@ CREATE POLICY "KYR articles can be updated by authenticated users" ON kyr_articl
 
 
 
+
+
