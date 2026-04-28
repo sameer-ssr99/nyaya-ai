@@ -75,7 +75,8 @@ export default function KYRCategoryView({ category }: KYRCategoryViewProps) {
       setLoading(true)
       
       // Format category name for display
-      const formattedCategory = category
+      const safeCategory = category || ""
+      const formattedCategory = safeCategory
         .split("-")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ")
@@ -101,7 +102,7 @@ export default function KYRCategoryView({ category }: KYRCategoryViewProps) {
           description: article.summary || "",
           content: article.content,
           slug: article.slug,
-          readTime: article.read_time || 5,
+          readTime: article.read_time || article.readTime || 5,
           difficulty: article.difficulty || "Beginner",
           tags: article.tags || [],
           createdAt: article.created_at,

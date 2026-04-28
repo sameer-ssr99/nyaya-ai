@@ -4,13 +4,14 @@ import { redirect } from "next/navigation"
 import KYRArticleView from "@/components/kyr-article-view"
 
 interface KYRArticlePageProps {
-  params: {
+  params: Promise<{
     category: string
     article: string
-  }
+  }>
 }
 
 export default async function KYRArticlePage({ params }: KYRArticlePageProps) {
+  const { category, article } = await params
   const supabase = await createServerClient()
 
   const {
@@ -26,7 +27,7 @@ export default async function KYRArticlePage({ params }: KYRArticlePageProps) {
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           <Suspense fallback={<div className="text-center">Loading article...</div>}>
-            <KYRArticleView category={params.category} articleSlug={params.article} />
+            <KYRArticleView category={category} articleSlug={article} />
           </Suspense>
         </div>
       </div>

@@ -18,6 +18,7 @@ interface Article {
   difficulty: "Beginner" | "Intermediate" | "Advanced"
   tags: string[]
   createdAt: string
+  category?: string
 }
 
 interface KYRArticleViewProps {
@@ -161,9 +162,21 @@ export default function KYRArticleView({ category, articleSlug }: KYRArticleView
       }
 
       if (data) {
-        setArticle(data)
+        const mappedArticle: Article = {
+          id: data.id,
+          title: data.title,
+          description: data.summary || data.description || "",
+          content: data.content || "",
+          slug: data.slug,
+          readTime: data.read_time || data.readTime || 5,
+          difficulty: data.difficulty || "Beginner",
+          tags: data.tags || [],
+          createdAt: data.created_at,
+          category: data.category,
+        }
+        setArticle(mappedArticle)
         // Check if article is bookmarked
-        await checkBookmarkStatus(data.id)
+        await checkBookmarkStatus(mappedArticle.id)
       } else {
         setError("Article not found")
       }
@@ -268,12 +281,14 @@ export default function KYRArticleView({ category, articleSlug }: KYRArticleView
     return <div className="text-center py-12">Loading article...</div>
   }
 
+  const backCategory = category || article?.category?.toLowerCase().replace(/\s+/g, "-") || "constitutional-rights"
+
   if (!article) {
     return (
       <div className="text-center py-12">
         <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-gray-900 mb-2">Article not found</h3>
-        <Link href={`/kyr/${category}`}>
+        <Link href={`/kyr/${backCategory}`}>
           <Button variant="outline">Back to Category</Button>
         </Link>
       </div>
@@ -284,11 +299,11 @@ export default function KYRArticleView({ category, articleSlug }: KYRArticleView
     <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
-        <Link href={`/kyr/${category}`}>
+        <Link href={`/kyr/${backCategory}`}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to{" "}
-            {category
+            {backCategory
               .split("-")
               .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
               .join(" ")}

@@ -4,12 +4,13 @@ import { redirect } from "next/navigation"
 import KYRCategoryView from "@/components/kyr-category-view"
 
 interface KYRCategoryPageProps {
-  params: {
+  params: Promise<{
     category: string
-  }
+  }>
 }
 
 export default async function KYRCategoryPage({ params }: KYRCategoryPageProps) {
+  const { category } = await params
   const supabase = await createServerClient()
 
   const {
@@ -25,7 +26,7 @@ export default async function KYRCategoryPage({ params }: KYRCategoryPageProps) 
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           <Suspense fallback={<div className="text-center">Loading category...</div>}>
-            <KYRCategoryView category={params.category} />
+            <KYRCategoryView category={category} />
           </Suspense>
         </div>
       </div>
