@@ -25,3 +25,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+*.pdf
+*.ppt
+*.pptx
+*.doc
+*.docx
