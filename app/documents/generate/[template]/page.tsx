@@ -4,12 +4,13 @@ import { redirect } from "next/navigation"
 import DocumentGenerator from "@/components/document-generator"
 
 interface DocumentGeneratePageProps {
-  params: {
+  params: Promise<{
     template: string
-  }
+  }>
 }
 
 export default async function DocumentGeneratePage({ params }: DocumentGeneratePageProps) {
+  const { template } = await params
   const supabase = await createServerClient()
 
   const {
@@ -25,7 +26,7 @@ export default async function DocumentGeneratePage({ params }: DocumentGenerateP
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
           <Suspense fallback={<div className="text-center">Loading generator...</div>}>
-            <DocumentGenerator templateSlug={params.template} userId={user.id} />
+            <DocumentGenerator templateSlug={template} userId={user.id} />
           </Suspense>
         </div>
       </div>
