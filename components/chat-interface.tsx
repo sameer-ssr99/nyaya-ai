@@ -217,34 +217,78 @@ export default function ChatInterface({ userId }: ChatInterfaceProps) {
       
       console.log("Puter.js response:", reply)
 
-      // Handle different response formats
-      let responseText = ""
-      if (reply && reply.message && reply.message.content) {
-        responseText = reply.message.content
-      } else if (reply && reply.output_text) {
-        responseText = reply.output_text
-      } else if (reply && typeof reply === 'string') {
-        responseText = reply
-      } else if (reply && reply.choices && reply.choices[0] && reply.choices[0].message) {
-        responseText = reply.choices[0].message.content
-      } else {
-        console.error("Unexpected response format:", reply)
-        throw new Error("Unexpected response format from Puter.js")
+      // Handle different response formats robustly
+      let extractedText = ""
+      
+      if (typeof reply === 'string') {
+        extractedText = reply
+      } else if (reply) {
+        // Handle message.content as an array (new Claude/Puter format)
+        if (reply.message && Array.isArray(reply.message.content)) {
+          extractedText = reply.message.content
+            .map((item: any) => (item.type === "text" ? item.text : ""))
+            .join("\n")
+        } 
+        // Handle message.content as a string
+        else if (reply.message && typeof reply.message.content === 'string') {
+          extractedText = reply.message.content
+        }
+        // Handle output_text
+        else if (typeof reply.output_text === 'string') {
+          extractedText = reply.output_text
+        }
+        // Handle choices array (OpenAI format)
+        else if (reply.choices && reply.choices[0] && reply.choices[0].message) {
+          const msg = reply.choices[0].message
+          if (typeof msg.content === 'string') {
+            extractedText = msg.content
+          } else if (Array.isArray(msg.content)) {
+            extractedText = msg.content
+              .map((item: any) => (item.type === "text" ? item.text : ""))
+              .join("\n")
+          }
+        }
+        // Handle top-level text or content
+        else if (typeof reply.text === 'string') {
+          extractedText = reply.text
+        }
+        else if (typeof reply.content === 'string') {
+          extractedText = reply.content
+        }
+        // Last resort string conversion
+        else {
+          extractedText = String(reply)
+        }
       }
 
-      if (!responseText || responseText.trim() === "") {
+      if (!extractedText || extractedText === "[object Object]") {
+        console.error("Failed to extract text from Puter.js response:", reply)
+        // If it's still [object Object], try to JSON stringify it to see what's inside
+        if (typeof reply === 'object') {
+          extractedText = "Error: Received unexpected object format. " + JSON.stringify(reply).substring(0, 100)
+        } else {
+          throw new Error("Unexpected response format from Puter.js")
+        }
+      }
+
+      const responseText = extractedText
+
+      // Ensure responseText is a string and trim it safely
+      const finalResponseText = typeof responseText === 'string' ? responseText.trim() : String(responseText || "").trim()
+
+      if (!finalResponseText) {
         throw new Error("Empty response from Puter.js")
       }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: responseText,
+        content: finalResponseText,
         role: "assistant",
         timestamp: new Date(),
       }
 
       setMessages((prev) => [...prev, assistantMessage])
-      await saveMessage(responseText, "assistant")
+      await saveMessage(finalResponseText, "assistant")
     } catch (error) {
       console.error("Error in chat:", error)
       const errorMessage: Message = {

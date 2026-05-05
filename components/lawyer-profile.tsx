@@ -143,9 +143,9 @@ export default function LawyerProfile({ lawyer, reviews, user }: LawyerProfilePr
                     </div>
                     <div className="flex items-center gap-2 mb-4">
                       <div className="flex items-center gap-1">
-                        {renderStars(Math.floor(lawyer.rating))}
-                        <span className="font-medium ml-1">{lawyer.rating.toFixed(1)}</span>
-                        <span className="text-muted-foreground">({lawyer.total_reviews} reviews)</span>
+                        {renderStars(Math.floor(lawyer.rating || 0))}
+                        <span className="font-medium ml-1">{(lawyer.rating || 0).toFixed(1)}</span>
+                        <span className="text-muted-foreground">({lawyer.total_reviews || 0} reviews)</span>
                       </div>
                     </div>
                   </div>
@@ -175,7 +175,7 @@ export default function LawyerProfile({ lawyer, reviews, user }: LawyerProfilePr
                 <p className="text-muted-foreground mb-4">{lawyer.bio}</p>
 
                 <div className="flex flex-wrap gap-2">
-                  {lawyer.lawyer_specialization_mapping.map((mapping: any, index: number) => (
+                  {(lawyer.lawyer_specialization_mapping || []).map((mapping: any, index: number) => (
                     <Badge key={index} variant="outline">
                       {mapping.lawyer_specializations.name}
                     </Badge>
@@ -230,7 +230,7 @@ export default function LawyerProfile({ lawyer, reviews, user }: LawyerProfilePr
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="specializations">Specializations</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews ({lawyer.total_reviews})</TabsTrigger>
+            <TabsTrigger value="reviews">Reviews ({lawyer.total_reviews || 0})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -251,7 +251,7 @@ export default function LawyerProfile({ lawyer, reviews, user }: LawyerProfilePr
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {lawyer.practice_areas.map((area: string, index: number) => (
+                      {(lawyer.practice_areas || []).map((area: string, index: number) => (
                         <div key={index} className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                           <Scale className="h-4 w-4 text-primary" />
                           <span>{area}</span>
@@ -301,7 +301,7 @@ export default function LawyerProfile({ lawyer, reviews, user }: LawyerProfilePr
                     <div>
                       <p className="text-sm font-medium">Languages</p>
                       <div className="flex flex-wrap gap-1 mt-1">
-                        {lawyer.languages.map((lang: string, index: number) => (
+                        {(lawyer.languages || []).map((lang: string, index: number) => (
                           <Badge key={index} variant="secondary" className="text-xs">
                             {lang}
                           </Badge>
@@ -322,7 +322,7 @@ export default function LawyerProfile({ lawyer, reviews, user }: LawyerProfilePr
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {lawyer.lawyer_specialization_mapping.map((mapping: any, index: number) => (
+                  {(lawyer.lawyer_specialization_mapping || []).map((mapping: any, index: number) => (
                     <div key={index} className="p-4 border rounded-lg">
                       <h3 className="font-semibold mb-2">{mapping.lawyer_specializations.name}</h3>
                       <p className="text-sm text-muted-foreground">{mapping.lawyer_specializations.description}</p>
